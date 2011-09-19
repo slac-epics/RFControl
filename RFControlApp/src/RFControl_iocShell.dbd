@@ -1,0 +1,9 @@
+#==========================================================
+# RFControl_iocShell.dbd
+#
+# Register the exported stuff in this folder
+#
+# Created by: Zheqiao Geng, gengzq@slac.stanford.edu
+# Created on: 2011.05.12
+#==========================================================
+registrar(RFC_IOCShellRegister)
