@@ -1,0 +1,5 @@
+This module implements the Low Level Applications of LLRF system, 
+including pulse-pulse phase control and RF synchronous 
+data/waveform acquisition. 
+The firmware control is also implemented in this module.
+
