@@ -25,7 +25,7 @@ LLRFLIBS_MODULE_VERSION=MAIN_TRUNK
 INTERNALDATA_MODULE_VERSION=MAIN_TRUNK
 RFCONTROLBOARD_MODULE_VERSION=MAIN_TRUNK
 
-EVENT_MODULE_VERSION=event-R3-2-2-br_generaltime-1-1
+EVENT_MODULE_VERSION=event-R3-2-2-br_generaltime-2-2
 
 #===============================================================================
 # Define the location of modules needed by
