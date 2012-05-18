@@ -190,13 +190,15 @@ static void RFC_func_mainThread(void *argIn)
     int intId;                                  /* for interrupt pulling */
 
     double phaSetPoint_deg_old = 1e6;           /* for detecting set point changes */
+    double phaSetPoint_deg_cal = 0;             /* for error calculation */
 
     long pulseCnt     = -1;                     /* for pulse counter reading */
     long pulseCnt_old = -1; 
 
     long irqDelayCnt  = 0;
 
-    double probeData = 0;                       /* the probe data */
+    double probeData  = 0;                      /* the probe data */
+    double probeData2 = 0;
 
     /* Check the input */
     if(!arg) {
@@ -232,28 +234,39 @@ static void RFC_func_mainThread(void *argIn)
          * PHASE CONTROL BLOCK
          *----------------------------------------------------*/ 
         /* Get the RF data */
+        RFC_func_getRFData(arg, &arg -> rfData_ref);
         RFC_func_getRFData(arg, &arg -> rfData_sledOut);                 /* get the SLED data from the DAQ buffer */
         RFC_func_getRFData(arg, &arg -> rfData_accOut_rf);               /* get the ACC data from the DAQ buffer */
 
         /* Measure the amplitude and phase in the window */
+        RFC_func_demodAvgRFData(&arg -> rfData_ref);
         RFC_func_demodAvgRFData(&arg -> rfData_sledOut);                        
         RFC_func_demodAvgRFData(&arg -> rfData_accOut_rf); 
 
-        /* Measure the phase error */
+        /* Fast feed forward when the set point changes */
+        if(arg -> fbData.fb_feedForwardEnabled && arg -> fbData.fb_phaSetPoint_deg != phaSetPoint_deg_old && fabs(phaSetPoint_deg_old) <= 180) {
+            arg -> fbData.fb_phaAdj_deg = arg -> fbData.fb_phaSetPoint_deg - phaSetPoint_deg_old;                                   /* Get the adjustement */              
+            if(arg -> fwFunc.FWC_func_setPha_deg) arg -> fwFunc.FWC_func_setPha_deg(arg -> fwModule, arg -> fbData.fb_phaAdj_deg);  /* Apply the adjustement to the firmware */
+
+            phaSetPoint_deg_cal = phaSetPoint_deg_old;
+        } else {
+            phaSetPoint_deg_cal = arg -> fbData.fb_phaSetPoint_deg;
+        }        
+
+        /* Measure the phase error, if the set point changed, use the old set point for calculation, see above */
         if(arg -> fbData.fb_phaSLEDWeight != 0 || arg -> fbData.fb_phaACCWeight != 0) {
-            arg -> fbData.fb_phaErr_deg = arg -> fbData.fb_phaSetPoint_deg - 
+            arg -> fbData.fb_phaErr_deg = phaSetPoint_deg_cal - 
                 (arg -> rfData_sledOut.avgDataPha_deg * arg -> fbData.fb_phaSLEDWeight + arg -> rfData_accOut_rf.avgDataPha_deg * arg -> fbData.fb_phaACCWeight);
+        
+            if(arg -> fbData.fb_refTrackEnabled) {                      /* consider the pulse-pulse reference tracking (subtract from the SLED/ACC phase, so add to the error) */
+                arg -> fbData.fb_phaErr_deg += arg -> rfData_ref.avgDataPha_deg;
+            }
         } else {
             arg -> fbData.fb_phaErr_deg = 0; 
         }
 
-        /* Fast feed forward and feedback */
-        if(arg -> fbData.fb_feedForwardEnabled && arg -> fbData.fb_phaSetPoint_deg != phaSetPoint_deg_old && fabs(phaSetPoint_deg_old) <= 180) {
-
-            arg -> fbData.fb_phaAdj_deg = arg -> fbData.fb_phaErr_deg;                                                              /* Get the adjustement */              
-            if(arg -> fwFunc.FWC_func_setPha_deg) arg -> fwFunc.FWC_func_setPha_deg(arg -> fwModule, arg -> fbData.fb_phaAdj_deg);  /* Apply the adjustement to the firmware */
-
-        } else if((fabs(arg -> fbData.fb_phaErr_deg) < arg -> fbData.fb_phaErrThreshold_deg) &&
+        /* Fast feedback, the feedback is independent with the feed forward */
+        if((fabs(arg -> fbData.fb_phaErr_deg) < arg -> fbData.fb_phaErrThreshold_deg) &&
             (arg -> rfData_sledOut.avgDataAmp > arg -> fbData.fb_ampLimitLo) &&
             (arg -> rfData_sledOut.avgDataAmp < arg -> fbData.fb_ampLimitHi) && (arg -> fbData.fb_feedbackEnabled)) { 
            
@@ -268,14 +281,13 @@ static void RFC_func_mainThread(void *argIn)
         /*----------------------------------------------------
          * HANDLE RF WAVEFORMS FOR BSA
          *----------------------------------------------------*/ 
-        RFC_func_getRFData(arg, &arg -> rfData_ref);                /* SLED out and ACC out rf has been handled above! */
+        /* reference signal, SLED out and ACC out rf has been handled above! */
         RFC_func_getRFData(arg, &arg -> rfData_vmOut);
         RFC_func_getRFData(arg, &arg -> rfData_klyDrive);
         RFC_func_getRFData(arg, &arg -> rfData_klyOut);
         RFC_func_getRFData(arg, &arg -> rfData_accOut_beam);
         RFC_func_getAnalogData(arg, &arg -> analogData_klyBeamV);
-
-        RFC_func_demodAvgRFData(&arg -> rfData_ref);
+        
         RFC_func_demodAvgRFData(&arg -> rfData_vmOut);
         RFC_func_demodAvgRFData(&arg -> rfData_klyDrive);
         RFC_func_demodAvgRFData(&arg -> rfData_klyOut);
@@ -355,7 +367,7 @@ static void RFC_func_mainThread(void *argIn)
         memcpy((void*)arg -> fbData.fb_phaErrArray_deg, (void *)(arg -> fbData.fb_phaErrArray_deg + 1), sizeof(double) * (RFC_CONST_RECENT_HISTORY_BUF_DEPTH - 1));
         arg -> fbData.fb_phaErrArray_deg[RFC_CONST_RECENT_HISTORY_BUF_DEPTH - 1] = arg -> fbData.fb_phaErr_deg;
 
-        /* probe the internal data */
+        /* probe the internal data (two probe data, code is not optimized)*/
         switch(arg -> diag_probeDataSel) {
             case 0:  probeData = arg -> fbData.fb_phaErr_deg;               strcpy(arg -> diag_probeStatus, "Pul-pul FB pha err (deg)");    break;
             case 1:  probeData = arg -> fbData.fb_phaAdj_deg;               strcpy(arg -> diag_probeStatus, "Pul-pul FB pha adj (deg)");    break;
@@ -377,8 +389,32 @@ static void RFC_func_mainThread(void *argIn)
             default: probeData = 0; strcpy(arg -> diag_probeStatus, "Not supported"); break;
         }
 
+        switch(arg -> diag_probeDataSel2) {
+            case 0:  probeData2 = arg -> fbData.fb_phaErr_deg;               strcpy(arg -> diag_probeStatus2, "Pul-pul FB pha err (deg)");    break;
+            case 1:  probeData2 = arg -> fbData.fb_phaAdj_deg;               strcpy(arg -> diag_probeStatus2, "Pul-pul FB pha adj (deg)");    break;
+            case 2:  probeData2 = arg -> rfData_ref.avgDataAmp;              strcpy(arg -> diag_probeStatus2, "REF amp");                     break;
+            case 3:  probeData2 = arg -> rfData_ref.avgDataPha_deg;          strcpy(arg -> diag_probeStatus2, "REF pha (deg)");               break;
+            case 4:  probeData2 = arg -> rfData_vmOut.avgDataAmp;            strcpy(arg -> diag_probeStatus2, "IQ MOD amp");                  break;
+            case 5:  probeData2 = arg -> rfData_vmOut.avgDataPha_deg;        strcpy(arg -> diag_probeStatus2, "IQ MOD pha (deg)");            break;
+            case 6:  probeData2 = arg -> rfData_klyDrive.avgDataAmp;         strcpy(arg -> diag_probeStatus2, "KLY DRV amp");                 break;
+            case 7:  probeData2 = arg -> rfData_klyDrive.avgDataPha_deg;     strcpy(arg -> diag_probeStatus2, "KLY DRV pha (deg)");           break;
+            case 8:  probeData2 = arg -> rfData_klyOut.avgDataAmp;           strcpy(arg -> diag_probeStatus2, "KLY OUT amp");                 break;
+            case 9:  probeData2 = arg -> rfData_klyOut.avgDataPha_deg;       strcpy(arg -> diag_probeStatus2, "KLY OUT pha (deg)");           break;
+            case 10: probeData2 = arg -> rfData_sledOut.avgDataAmp;          strcpy(arg -> diag_probeStatus2, "SLED OUT amp");                break;
+            case 11: probeData2 = arg -> rfData_sledOut.avgDataPha_deg;      strcpy(arg -> diag_probeStatus2, "SLED OUT pha (deg)");          break;
+            case 12: probeData2 = arg -> rfData_accOut_rf.avgDataAmp;        strcpy(arg -> diag_probeStatus2, "ACC RF amp");                  break;
+            case 13: probeData2 = arg -> rfData_accOut_rf.avgDataPha_deg;    strcpy(arg -> diag_probeStatus2, "ACC RF pha (deg)");            break;
+            case 14: probeData2 = arg -> rfData_accOut_beam.avgDataAmp;      strcpy(arg -> diag_probeStatus2, "ACC BEAM amp");                break;
+            case 15: probeData2 = arg -> rfData_accOut_beam.avgDataPha_deg;  strcpy(arg -> diag_probeStatus2, "ACC BEAM pha (deg)");          break;
+            case 16: probeData2 = arg -> analogData_klyBeamV.avgData;        strcpy(arg -> diag_probeStatus2, "KLY HV amp");                  break;
+            default: probeData2 = 0; strcpy(arg -> diag_probeStatus2, "Not supported"); break;
+        }
+
         memcpy((void*)arg -> diag_probeData, (void *)(arg -> diag_probeData + 1), sizeof(double) * (RFC_CONST_RECENT_HISTORY_BUF_DEPTH - 1));
         arg -> diag_probeData[RFC_CONST_RECENT_HISTORY_BUF_DEPTH - 1] = probeData;
+
+        memcpy((void*)arg -> diag_probeData2, (void *)(arg -> diag_probeData2 + 1), sizeof(double) * (RFC_CONST_RECENT_HISTORY_BUF_DEPTH - 1));
+        arg -> diag_probeData2[RFC_CONST_RECENT_HISTORY_BUF_DEPTH - 1] = probeData2;
 
         /* compile the status vector (continuing)
          *      bit 0: 1 for firmware/communication failure

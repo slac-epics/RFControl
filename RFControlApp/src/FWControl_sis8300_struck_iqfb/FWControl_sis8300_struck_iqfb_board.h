@@ -45,6 +45,7 @@ extern "C" {
  * common 
  *-------------------------- */
 void *FWC_sis8300_struck_iqfb_func_getBoardHandle(const char *boardModuleName);                                             /* get the handle of the RF Control Board module */
+void FWC_sis8300_struck_iqfb_func_getBoardInfo(void *boardHandle, char *deviceName, int *deviceOpened);                     /* get the information of the RF Control Board module */
 
 #define FWC_sis8300_struck_iqfb_func_pullInterrupt(boardHandle) RFCB_API_pullInterrupt((RFCB_struc_moduleData *)(boardHandle))      /* pull the interrupt */
 

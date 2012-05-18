@@ -21,6 +21,12 @@
  * Modified by: Zheqiao Geng
  * Modified on: 2011.07.07
  * Description: Only keep the application layer here (pulse-pulse phase feedback and BSA)
+ *
+ * Modified by: Zheqiao Geng
+ * Modified on: 2011.10.11
+ * Description: 1. Add another probe so that we can compare the correlations between data
+ *              2. Add the reference tracking capability
+ *              3. Redesign the algorithm for fast feed foward so that Patten Aware errors can be handled
  ****************************************************/
 #ifndef RF_CONTROL_MAIN_H
 #define RF_CONTROL_MAIN_H
@@ -63,6 +69,8 @@ typedef struct {
 
     volatile unsigned short fb_feedbackEnabled;             /* put 1 to enable the pulse - pulse feedback */
     volatile unsigned short fb_feedForwardEnabled;          /* put 1 to enable the fast feed forward when the set point changes */
+
+    volatile unsigned short fb_refTrackEnabled;             /* put 1 to enable the reference tracking for pulse-pulse feedback */
 
     double fb_phaErrArray_deg[RFC_CONST_RECENT_HISTORY_BUF_DEPTH];  /* a FIFO to show the recent history of the phase error */        
 
@@ -131,6 +139,10 @@ typedef struct {
     volatile long diag_probeDataSel;                            /* select the data that you want */
     double diag_probeData[RFC_CONST_RECENT_HISTORY_BUF_DEPTH];  /* a FIFO to show the recent history of the selected data */        
     char diag_probeStatus[128];                                 /* status message of the probe */
+
+    volatile long diag_probeDataSel2;                           /* select the data that you want */
+    double diag_probeData2[RFC_CONST_RECENT_HISTORY_BUF_DEPTH]; /* a FIFO to show the recent history of the selected data */        
+    char diag_probeStatus2[128];                                /* status message of the probe */
 
 } RFC_struc_moduleData;
 

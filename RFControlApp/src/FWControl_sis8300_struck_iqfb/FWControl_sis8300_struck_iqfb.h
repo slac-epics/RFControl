@@ -37,6 +37,9 @@ extern "C" {
 typedef struct {
     void *board_handle;                                     /* handle of the RFControlBoard */
     
+    char board_deviceName[EPICSLIB_CONST_NAME_LEN];         /* name of the device in "/dev" */
+    volatile long board_deviceOpened;                       /* 1 to indicate the device is correctly opened */
+
     /* --- for platform firmware --- */
     /* this part define the variables for the build in platform firmware provided by the Struck company. All parameters
      * corresponds to the registers defined in the manual of the Struck SIS8300 board 
@@ -66,6 +69,8 @@ typedef struct {
     volatile unsigned short board_IRQEnabled;               /* 1 to indicate the user IRQ is enabled */    
     volatile unsigned short board_DACOutSel;                /* 1 to indicate the DAC is outputing the RF simulator results (DAC1 for kly sim, DAC2 for SLED sim) */ 
     volatile unsigned short board_applyCoefIdOffset;        /* 1 to send the command to apply the coef ID offset */    
+
+    volatile unsigned short board_fbEnable;                 /* 1 to enable the intra-pulse feedback */
 
     volatile unsigned long  board_refChSel;                 /* reference channel selection (from ADC channels) */
     volatile unsigned long  board_fbkChSel;                 /* feedback channel selection (from ADC channels) */

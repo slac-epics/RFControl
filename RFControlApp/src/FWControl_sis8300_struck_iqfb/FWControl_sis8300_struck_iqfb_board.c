@@ -29,6 +29,16 @@ void *FWC_sis8300_struck_iqfb_func_getBoardHandle(const char *boardModuleName)
     return (void *)RFCB_API_getModule(boardModuleName);
 }
 
+/**
+ * Get the information of the board, the device name in the folder of "/dev" and if it is correctly opened
+ */
+void FWC_sis8300_struck_iqfb_func_getBoardInfo(void *boardHandle, char *deviceName, int *deviceOpened)
+{
+    RFCB_struc_moduleData *board = (RFCB_struc_moduleData *)boardHandle;
+
+    RFCB_API_getModuleStatus(board, deviceName, deviceOpened);
+}
+
 /*-------------------------------------------------------------
  * PLATFORM FIRMWARE SETTINGS/READINGS
  *-------------------------------------------------------------*/

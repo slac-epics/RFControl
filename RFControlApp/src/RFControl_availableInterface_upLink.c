@@ -54,6 +54,9 @@ static int RFC_func_rfWfCreateData(const char *moduleName, const char *wfName, R
     strncpy(var_dataName, wfName, 64); strcat(var_dataName, "_CHID");
     status += INTD_API_createDataNode(moduleName, var_dataName, (void *)(&wfDAQ->chId),           NULL, 1, NULL, INTD_ULONG, NULL, NULL, NULL, NULL, INTD_MBBO, INTD_PASSIVE);  /* w */
 
+    strncpy(var_dataName, wfName, 64); strcat(var_dataName, "_VALID");
+    status += INTD_API_createDataNode(moduleName, var_dataName, (void *)(&wfDAQ->valid),          NULL, 1, NULL, INTD_USHORT, NULL, NULL, NULL, NULL, INTD_BO, INTD_PASSIVE);  /* w */
+
     strncpy(var_dataName, wfName, 64); strcat(var_dataName, "_AVGS");
     status += INTD_API_createDataNode(moduleName, var_dataName, (void *)(&wfDAQ->avgStartTime_ns), NULL, 1, NULL, INTD_DOUBLE, NULL, NULL, NULL, NULL, INTD_AO, INTD_PASSIVE);  /* w */
     
@@ -177,6 +180,8 @@ int RFC_func_createEpicsData(RFC_struc_moduleData *arg)
     status += INTD_API_createDataNode(arg->moduleName, "APP_FBK_ENA",       (void *)(&arg->fbData.fb_feedbackEnabled),      (void *)arg, 1, NULL, INTD_USHORT, NULL, NULL, NULL, NULL, INTD_BO, INTD_PASSIVE);        
     status += INTD_API_createDataNode(arg->moduleName, "APP_FF_ENA",        (void *)(&arg->fbData.fb_feedForwardEnabled),   (void *)arg, 1, NULL, INTD_USHORT, NULL, NULL, NULL, NULL, INTD_BO, INTD_PASSIVE);        
     
+    status += INTD_API_createDataNode(arg->moduleName, "APP_REFT_ENA",      (void *)(&arg->fbData.fb_refTrackEnabled),      (void *)arg, 1, NULL, INTD_USHORT, NULL, NULL, NULL, NULL, INTD_BO, INTD_PASSIVE);        
+
     /*-----------------------------------
      * Read only data - 120 Hz (for variables might need BSA)
      *-----------------------------------*/    
@@ -221,6 +226,10 @@ int RFC_func_createEpicsData(RFC_struc_moduleData *arg)
     status += INTD_API_createDataNode(arg->moduleName, "DIAG_PROBE_SEL",    (void *)(&arg -> diag_probeDataSel), (void *)arg, 1,   NULL, INTD_LONG, NULL, NULL, NULL, NULL, INTD_LO, INTD_PASSIVE);
     status += INTD_API_createDataNode(arg->moduleName, "DIAG_PROBE_DATA",   (void *)(arg -> diag_probeData),     NULL, RFC_CONST_RECENT_HISTORY_BUF_DEPTH, NULL, INTD_DOUBLE, NULL, NULL, NULL, NULL, INTD_WFI, INTD_1S);         /* r */
     status += INTD_API_createDataNode(arg->moduleName, "DIAG_PROBE_STATUS", (void *)(arg -> diag_probeStatus),   (void *)arg, 128, NULL, INTD_CHAR, NULL, NULL, NULL, NULL, INTD_WFI, INTD_1S);
+
+    status += INTD_API_createDataNode(arg->moduleName, "DIAG_PROBE_SEL2",    (void *)(&arg -> diag_probeDataSel2), (void *)arg, 1,   NULL, INTD_LONG, NULL, NULL, NULL, NULL, INTD_LO, INTD_PASSIVE);
+    status += INTD_API_createDataNode(arg->moduleName, "DIAG_PROBE_DATA2",   (void *)(arg -> diag_probeData2),     NULL, RFC_CONST_RECENT_HISTORY_BUF_DEPTH, NULL, INTD_DOUBLE, NULL, NULL, NULL, NULL, INTD_WFI, INTD_1S);         /* r */
+    status += INTD_API_createDataNode(arg->moduleName, "DIAG_PROBE_STATUS2", (void *)(arg -> diag_probeStatus2),   (void *)arg, 128, NULL, INTD_CHAR, NULL, NULL, NULL, NULL, INTD_WFI, INTD_1S);
 
     status += INTD_API_createDataNode(arg->moduleName, "DIAG_STATUS_VECT",  (void *)(&arg -> statusVector), (void *)arg, 1, NULL, INTD_LONG,  NULL, NULL, NULL, NULL, INTD_LI, INTD_1S);
 

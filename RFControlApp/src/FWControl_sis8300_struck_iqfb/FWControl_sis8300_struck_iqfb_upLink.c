@@ -72,9 +72,12 @@ static void r_getFwInfo(void *ptr)
     unsigned int minorVer;
     unsigned int buildNum;
 
+    int deviceOpened;
+
     if(arg && arg -> board_handle) {
         FWC_sis8300_struck_iqfb_func_getPlatformInfo(arg -> board_handle, &platformFwId, &boardSno);
         FWC_sis8300_struck_iqfb_func_getAppFwInfo(arg -> board_handle, &firmwareName, &majorVer, &minorVer, &buildNum);
+        FWC_sis8300_struck_iqfb_func_getBoardInfo(arg -> board_handle, arg -> board_deviceName, &deviceOpened);
         
         arg -> board_platformFwId   = (long)platformFwId;
         arg -> board_sno            = (long)boardSno;
@@ -83,6 +86,8 @@ static void r_getFwInfo(void *ptr)
         arg -> board_majorVer       = (long)majorVer;
         arg -> board_minorVer       = (long)minorVer;
         arg -> board_buildNum       = (long)buildNum;
+
+        arg -> board_deviceOpened   = (long)deviceOpened;
     }
 }
 
@@ -275,8 +280,8 @@ static void w_setGain(void *ptr)
     FWC_sis8300_struck_iqfb_struc_data *arg    = (FWC_sis8300_struck_iqfb_struc_data *)dataNode->privateData;
 
     if(arg && arg -> board_handle) {
-        FWC_sis8300_struck_iqfb_func_setGain_I(arg -> board_handle, arg -> board_gainI);
-        FWC_sis8300_struck_iqfb_func_setGain_Q(arg -> board_handle, arg -> board_gainQ);
+        FWC_sis8300_struck_iqfb_func_setGain_I(arg -> board_handle, arg -> board_gainI * arg -> board_fbEnable);
+        FWC_sis8300_struck_iqfb_func_setGain_Q(arg -> board_handle, arg -> board_gainQ * arg -> board_fbEnable);
     }
 }
 
@@ -454,13 +459,16 @@ int FWC_sis8300_struck_iqfb_func_createEpicsData(void *module, const char *modul
     /*-----------------------------------
      * Direct writing/reading the board
      *-----------------------------------*/
+    status += INTD_API_createDataNode(moduleName, "B_DEV_NAME",    (void *)(arg  -> board_deviceName),          (void *)arg, EPICSLIB_CONST_NAME_LEN, NULL, INTD_CHAR, NULL, NULL, NULL, NULL, INTD_WFI, INTD_10S);
+    status += INTD_API_createDataNode(moduleName, "B_DEV_OPENED",  (void *)(&arg -> board_deviceOpened),        (void *)arg, 1, NULL, INTD_LONG, r_getFwInfo, NULL,  NULL, NULL, INTD_LI, INTD_10S);
+
     status += INTD_API_createDataNode(moduleName, "B_SET_SPI",     (void *)(&arg -> board_setupSPI),            (void *)arg, 1, NULL, INTD_USHORT, NULL, w_setSPI,  NULL, NULL, INTD_BO, INTD_PASSIVE);
     status += INTD_API_createDataNode(moduleName, "B_CLK_DIV2",    (void *)(&arg -> board_clkDiv2),             (void *)arg, 1, NULL, INTD_USHORT, NULL,     NULL,  NULL, NULL, INTD_BO, INTD_PASSIVE);
 
     status += INTD_API_createDataNode(moduleName, "B_ADC_CLK_SEL", (void *)(&arg -> board_ADCClockSel),         (void *)arg, 1, NULL, INTD_ULONG, NULL, w_ADCClkSrc, NULL, NULL, INTD_MBBO, INTD_PASSIVE);
 
     status += INTD_API_createDataNode(moduleName, "B_PLFWID",      (void *)(&arg -> board_platformFwId),        (void *)arg, 1, NULL, INTD_LONG, r_getFwInfo, NULL, NULL, NULL, INTD_LI, INTD_10S);
-    status += INTD_API_createDataNode(moduleName, "B_BOARDSNO",    (void *)(&arg -> board_sno),                 (void *)arg, 1, NULL, INTD_LONG, NULL,        NULL, NULL, NULL, INTD_LI, INTD_10S);
+    status += INTD_API_createDataNode(moduleName, "B_BOARDSNO",    (void *)(&arg -> board_sno),                 (void *)arg, 1, NULL, INTD_LONG, NULL, NULL, NULL, NULL, INTD_LI, INTD_10S);
 
     status += INTD_API_createDataNode(moduleName, "B_HLNKO",       (void *)(&arg -> board_harlinkOut),          (void *)arg, 1, NULL, INTD_LONG, NULL, w_setDigitalOut, NULL, NULL, INTD_LO, INTD_PASSIVE);
     status += INTD_API_createDataNode(moduleName, "B_LVDSO",       (void *)(&arg -> board_amcLVDSOut),          (void *)arg, 1, NULL, INTD_LONG, NULL, w_setDigitalOut, NULL, NULL, INTD_LO, INTD_PASSIVE);
@@ -478,10 +486,12 @@ int FWC_sis8300_struck_iqfb_func_createEpicsData(void *module, const char *modul
     status += INTD_API_createDataNode(moduleName, "B_DAC_OUT_SEL", (void *)(&arg -> board_DACOutSel),           (void *)arg, 1, NULL, INTD_USHORT, NULL, w_setBits, NULL, NULL, INTD_BO, INTD_PASSIVE);
     status += INTD_API_createDataNode(moduleName, "B_APPL_ID_OFF", (void *)(&arg -> board_applyCoefIdOffset),   (void *)arg, 1, NULL, INTD_USHORT, NULL, w_setBits, NULL, NULL, INTD_BO, INTD_PASSIVE);
 
+    status += INTD_API_createDataNode(moduleName, "B_ENA_FB",      (void *)(&arg -> board_fbEnable),            (void *)arg, 1, NULL, INTD_USHORT, NULL, w_setGain, NULL, NULL, INTD_BO, INTD_PASSIVE);
+ 
     status += INTD_API_createDataNode(moduleName, "B_REF_SEL",     (void *)(&arg -> board_refChSel),            (void *)arg, 1, NULL, INTD_ULONG, NULL, w_setRefFbkChId, NULL, NULL, INTD_MBBO, INTD_PASSIVE);
     status += INTD_API_createDataNode(moduleName, "B_FBK_SEL",     (void *)(&arg -> board_fbkChSel),            (void *)arg, 1, NULL, INTD_ULONG, NULL, w_setRefFbkChId, NULL, NULL, INTD_MBBO, INTD_PASSIVE);
 
-    status += INTD_API_createDataNode(moduleName, "B_FMNAME",      (void *)(&arg -> board_firmwareName),        (void *)arg, 1, NULL, INTD_LONG, NULL, NULL, NULL, NULL, INTD_LI, INTD_10S);
+    status += INTD_API_createDataNode(moduleName, "B_FMNAME",      (void *)(&arg -> board_firmwareName),        (void *)arg, 1, NULL, INTD_LONG, r_getFwInfo, NULL, NULL, NULL, INTD_LI, INTD_10S);
     status += INTD_API_createDataNode(moduleName, "B_MJVERS",      (void *)(&arg -> board_majorVer),            (void *)arg, 1, NULL, INTD_LONG, NULL, NULL, NULL, NULL, INTD_LI, INTD_10S);
     status += INTD_API_createDataNode(moduleName, "B_MIVERS",      (void *)(&arg -> board_minorVer),            (void *)arg, 1, NULL, INTD_LONG, NULL, NULL, NULL, NULL, INTD_LI, INTD_10S);
     status += INTD_API_createDataNode(moduleName, "B_BLDNUM",      (void *)(&arg -> board_buildNum),            (void *)arg, 1, NULL, INTD_LONG, NULL, NULL, NULL, NULL, INTD_LI, INTD_10S);
