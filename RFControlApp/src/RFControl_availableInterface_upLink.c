@@ -38,6 +38,19 @@ static void w_setFileName(void *ptr)
     }
 }
 
+/* Write callback function, set the maximum energy gain */
+/*static void w_setMaxEGain(void *ptr)
+{
+    INTD_struc_node      *dataNode = (INTD_struc_node *)ptr;
+    
+    if(!dataNode) return; 
+    RFC_struc_moduleData *arg      = (RFC_struc_moduleData *)dataNode->privateData;
+
+    if(arg) {
+        arg -> rfData_sledOut.ampScale = arg -> fbData.fb_energyGain_MeV / arg -> rfData_sledOut.avgDataAmp;
+        arg -> fbData.fb_ampScale_1oMV = arg -> rfData_sledOut.ampScale;
+    }
+}*/
 
 /**
  * Create data nodes for RF waveform objects
@@ -164,12 +177,19 @@ int RFC_func_createEpicsData(RFC_struc_moduleData *arg)
     if(arg -> fwFunc.FWC_func_createEpicsData)    
         status += arg -> fwFunc.FWC_func_createEpicsData(arg -> fwModule, arg -> moduleName);
 
+    status += INTD_API_createDataNode(arg->moduleName, "MTCAON",            (void *)(&arg->mtcaOn),                         (void *)arg, 1, NULL, INTD_USHORT, NULL, NULL, NULL, NULL, INTD_BO, INTD_PASSIVE);      
+
     /*-----------------------------------
      * Write only data - parameters to the LLA
      *-----------------------------------*/
-    status += INTD_API_createDataNode(arg->moduleName, "APP_PHA_SP",        (void *)(&arg->fbData.fb_phaSetPoint_deg),      (void *)arg, 1, NULL, INTD_DOUBLE, NULL, NULL, NULL, NULL, INTD_AO, INTD_PASSIVE);        
+    status += INTD_API_createDataNode(arg->moduleName, "APP_PHA_SP",        (void *)(&arg->fbData.fb_phaSetPoint_deg),      (void *)arg, 1, NULL, INTD_DOUBLE, NULL, NULL, NULL, NULL, INTD_AO, INTD_PASSIVE);  
+    status += INTD_API_createDataNode(arg->moduleName, "APP_PHA_OFF",       (void *)(&arg->fbData.fb_phaOffset_deg),        (void *)arg, 1, NULL, INTD_DOUBLE, NULL, NULL, NULL, NULL, INTD_AO, INTD_PASSIVE);  
     status += INTD_API_createDataNode(arg->moduleName, "APP_PHA_FBGAIN",    (void *)(&arg->fbData.fb_phaGain),              (void *)arg, 1, NULL, INTD_DOUBLE, NULL, NULL, NULL, NULL, INTD_AO, INTD_PASSIVE);        
     status += INTD_API_createDataNode(arg->moduleName, "APP_PHA_ERRTHR",    (void *)(&arg->fbData.fb_phaErrThreshold_deg),  (void *)arg, 1, NULL, INTD_DOUBLE, NULL, NULL, NULL, NULL, INTD_AO, INTD_PASSIVE);        
+
+    status += INTD_API_createDataNode(arg->moduleName, "APP_AMP_SP",        (void *)(&arg->fbData.fb_ampSetPoint_MV),       (void *)arg, 1, NULL, INTD_DOUBLE, NULL, NULL, NULL, NULL, INTD_AO, INTD_PASSIVE);  
+    status += INTD_API_createDataNode(arg->moduleName, "APP_AMP_SCALE",     (void *)(&arg->fbData.fb_ampScale_1oMV),        (void *)arg, 1, NULL, INTD_DOUBLE, NULL, NULL, NULL, NULL, INTD_AO, INTD_PASSIVE);
+    /*status += INTD_API_createDataNode(arg->moduleName, "APP_MAX_EGAIN",     (void *)(&arg->fbData.fb_energyGain_MeV),       (void *)arg, 1, NULL, INTD_DOUBLE, NULL, w_setMaxEGain, NULL, NULL, INTD_AO, INTD_PASSIVE);*/
 
     status += INTD_API_createDataNode(arg->moduleName, "APP_AMP_LIMITH",    (void *)(&arg->fbData.fb_ampLimitHi),           (void *)arg, 1, NULL, INTD_DOUBLE, NULL, NULL, NULL, NULL, INTD_AO, INTD_PASSIVE);        
     status += INTD_API_createDataNode(arg->moduleName, "APP_AMP_LIMITL",    (void *)(&arg->fbData.fb_ampLimitLo),           (void *)arg, 1, NULL, INTD_DOUBLE, NULL, NULL, NULL, NULL, INTD_AO, INTD_PASSIVE);        
@@ -185,8 +205,19 @@ int RFC_func_createEpicsData(RFC_struc_moduleData *arg)
     /*-----------------------------------
      * Read only data - 120 Hz (for variables might need BSA)
      *-----------------------------------*/    
+    status += INTD_API_createDataNode(arg->moduleName, "BSA_PHA_VAL",       (void *)(&arg->fbData.fb_pha_deg),    (void *)arg, 1, &arg->ioscanpvt_120Hz, INTD_DOUBLE, NULL, NULL, NULL, NULL, INTD_AI, INTD_IOINT);    
     status += INTD_API_createDataNode(arg->moduleName, "BSA_PHA_ERR",       (void *)(&arg->fbData.fb_phaErr_deg), (void *)arg, 1, &arg->ioscanpvt_120Hz, INTD_DOUBLE, NULL, NULL, NULL, NULL, INTD_AI, INTD_IOINT);    
     status += INTD_API_createDataNode(arg->moduleName, "BSA_PHA_ADJ",       (void *)(&arg->fbData.fb_phaAdj_deg), (void *)arg, 1, &arg->ioscanpvt_120Hz, INTD_DOUBLE, NULL, NULL, NULL, NULL, INTD_AI, INTD_IOINT);        
+
+    status += INTD_API_createDataNode(arg->moduleName, "BSA_AMP_VAL",       (void *)(&arg->fbData.fb_amp_MV),     (void *)arg, 1, &arg->ioscanpvt_120Hz, INTD_DOUBLE, NULL, NULL, NULL, NULL, INTD_AI, INTD_IOINT);    
+    status += INTD_API_createDataNode(arg->moduleName, "BSA_AMP_ERR",       (void *)(&arg->fbData.fb_ampErr_MV),  (void *)arg, 1, &arg->ioscanpvt_120Hz, INTD_DOUBLE, NULL, NULL, NULL, NULL, INTD_AI, INTD_IOINT);    
+
+    status += INTD_API_createDataNode(arg->moduleName, "BSA_PHA_VAL_SLOW",  (void *)(&arg->fbData.fb_pha_deg),    (void *)arg, 1, NULL, INTD_DOUBLE, NULL, NULL, NULL, NULL, INTD_AI, INTD_1S);    
+    status += INTD_API_createDataNode(arg->moduleName, "BSA_PHA_ERR_SLOW",  (void *)(&arg->fbData.fb_phaErr_deg), (void *)arg, 1, NULL, INTD_DOUBLE, NULL, NULL, NULL, NULL, INTD_AI, INTD_1S);    
+    status += INTD_API_createDataNode(arg->moduleName, "BSA_PHA_ADJ_SLOW",  (void *)(&arg->fbData.fb_phaAdj_deg), (void *)arg, 1, NULL, INTD_DOUBLE, NULL, NULL, NULL, NULL, INTD_AI, INTD_1S); 
+
+    status += INTD_API_createDataNode(arg->moduleName, "BSA_AMP_VAL_SLOW",  (void *)(&arg->fbData.fb_amp_MV),     (void *)arg, 1, NULL, INTD_DOUBLE, NULL, NULL, NULL, NULL, INTD_AI, INTD_1S);
+    status += INTD_API_createDataNode(arg->moduleName, "BSA_AMP_ERR_SLOW",  (void *)(&arg->fbData.fb_ampErr_MV),  (void *)arg, 1, NULL, INTD_DOUBLE, NULL, NULL, NULL, NULL, INTD_AI, INTD_1S);
 
     /*-----------------------------------
      * DAQ buffers and settings - waveforms (the average data may also need BSA)

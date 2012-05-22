@@ -158,7 +158,7 @@ int FWC_sis8300_struck_iqfb_func_getMaxSampleNum(long *pno_max)
 {
    if(!pno_max) return -1;
 
-   *pno_max = FWC_SIS8300_STRUCK_IQFB_CONST_DAQ_BUF_DEPTH;
+   *pno_max = FWC_SIS8300_STRUCK_IQFB_CONST_APPDATA_BUF_DEPTH;
 
    return 0;
 }
@@ -220,11 +220,11 @@ int FWC_sis8300_struck_iqfb_func_getADCData(void *module, unsigned long channel,
 
     /* get data */
     if(arg -> board_ADC_data[channel]) 
-        memcpy((void *)data, (void *)arg -> board_ADC_data[channel], sizeof(short) * FWC_SIS8300_STRUCK_IQFB_CONST_DAQ_BUF_DEPTH);
+        memcpy((void *)data, (void *)arg -> board_ADC_data[channel], sizeof(short) * FWC_SIS8300_STRUCK_IQFB_CONST_APPDATA_BUF_DEPTH);
 
     *sampleFreq_MHz = arg -> board_sampleFreq_MHz;
     *sampleDelay_ns = arg -> board_DAQTriggerDelay_ns;
-    *pno            = FWC_SIS8300_STRUCK_IQFB_CONST_DAQ_BUF_DEPTH;
+    *pno            = FWC_SIS8300_STRUCK_IQFB_CONST_APPDATA_BUF_DEPTH;
     *coefIdCur      = arg -> board_coefIdCur;
 
     return 0;

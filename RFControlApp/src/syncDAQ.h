@@ -11,8 +11,8 @@
 #ifndef SYNC_DAQ_H
 #define SYNC_DAQ_H
 
-#define SDAQ_CONST_BUF_SIZE             1024                /* 64K points supported in single value DAQ buffer */
-#define SDAQ_CONST_WF_PNO_SUPPORTED     512                 /* support 512 point waveforms */
+#define SDAQ_CONST_BUF_SIZE             65536               /* 64K points supported in single value DAQ buffer */
+#define SDAQ_CONST_WF_PNO_SUPPORTED     1024                /* support 512 point waveforms */
 #define SDAQ_CONST_WF_NUM_SUPPORTED     2048                /* maximum 2048 waveforms can be saved */
 
 #include "MathLib_dataProcess.h"

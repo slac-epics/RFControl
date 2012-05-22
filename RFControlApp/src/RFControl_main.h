@@ -27,6 +27,10 @@
  * Description: 1. Add another probe so that we can compare the correlations between data
  *              2. Add the reference tracking capability
  *              3. Redesign the algorithm for fast feed foward so that Patten Aware errors can be handled
+ *
+ * Modified by: Zheqiao Geng
+ * Modified on: 2011.12.01
+ * Description: Add the operator/physics application interfaces
  ****************************************************/
 #ifndef RF_CONTROL_MAIN_H
 #define RF_CONTROL_MAIN_H
@@ -55,11 +59,20 @@ extern "C" {
 typedef struct {
 
     volatile double fb_phaSetPoint_deg;                     /* phase set point value for the pulse - pulse control (respect to beam) */
+    volatile double fb_phaOffset_deg;                       /* on crest acceleration phase, result from the phasing */
     volatile double fb_phaGain;                             /* feedback gain */        
     volatile double fb_phaErrThreshold_deg;                 /* when the error larger than this threshold, it will not be taken into account */
 
+    volatile double fb_pha_deg;                             /* the final phase used for feedback (combination of SLED, ACC RF and REF) */
     volatile double fb_phaErr_deg;                          /* phase error */
     volatile double fb_phaAdj_deg;                          /* phase adjustment */
+
+    volatile double fb_ampSetPoint_MV;                      /* amplitude set point (amplitude feedback only works for certain stations) */
+    volatile double fb_ampScale_1oMV;                       /* amplitude scale factor, result from the phasing */
+    /*volatile double fb_energyGain_MeV;*/                      /* maximum energy gain of the station, result from the phasing */
+
+    volatile double fb_amp_MV;                              /* the final amplitude for feedback (from SLED measurement) */
+    volatile double fb_ampErr_MV;                           /* amplitude error */
 
     volatile double fb_ampLimitHi;                          /* amplitude limits. Only the amplitude is in this limits range, we will do feedback */
     volatile double fb_ampLimitLo;
@@ -100,6 +113,8 @@ typedef struct {
     volatile long IRQMissingCnt;                            /* IRQ missing counter */
 
     volatile long statusVector;
+
+    volatile unsigned short mtcaOn;                         /* to show if MTCA on (for beam acceleration) or not */
 
     /* --- data and access for firmware --- */
     void *boardHandle;                                      /* board handle of the RFControlBoard module */

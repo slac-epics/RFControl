@@ -22,6 +22,8 @@
 
 #include "FWControl_sis8300_struck_iqfb_board.h"
 
+#define FWC_SIS8300_STRUCK_IQFB_CONST_APPDATA_BUF_DEPTH 1024    /* the application part will use part of the ADC raw data, this is the number of point */
+
 #ifdef __cplusplus
 extern "C" {
 #endif

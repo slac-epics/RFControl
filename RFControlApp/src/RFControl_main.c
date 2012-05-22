@@ -192,6 +192,8 @@ static void RFC_func_mainThread(void *argIn)
     double phaSetPoint_deg_old = 1e6;           /* for detecting set point changes */
     double phaSetPoint_deg_cal = 0;             /* for error calculation */
 
+    double phaOffset_deg_old   = 1e6;           /* for detecting phase offset changes */
+
     long pulseCnt     = -1;                     /* for pulse counter reading */
     long pulseCnt_old = -1; 
 
@@ -235,18 +237,32 @@ static void RFC_func_mainThread(void *argIn)
          *----------------------------------------------------*/ 
         /* Get the RF data */
         RFC_func_getRFData(arg, &arg -> rfData_ref);
-        RFC_func_getRFData(arg, &arg -> rfData_sledOut);                 /* get the SLED data from the DAQ buffer */
-        RFC_func_getRFData(arg, &arg -> rfData_accOut_rf);               /* get the ACC data from the DAQ buffer */
+        RFC_func_getRFData(arg, &arg -> rfData_sledOut);                        /* get the SLED data from the DAQ buffer */
+        RFC_func_getRFData(arg, &arg -> rfData_accOut_rf);                      /* get the ACC data from the DAQ buffer */
 
         /* Measure the amplitude and phase in the window */
         RFC_func_demodAvgRFData(&arg -> rfData_ref);
         RFC_func_demodAvgRFData(&arg -> rfData_sledOut);                        
         RFC_func_demodAvgRFData(&arg -> rfData_accOut_rf); 
 
+        /* Get the effective phase measurement of last RF pulse (combination of SLED, ACC RF and REF) */
+        arg -> fbData.fb_pha_deg = arg -> rfData_sledOut.avgDataPha_deg * arg -> fbData.fb_phaSLEDWeight + arg -> rfData_accOut_rf.avgDataPha_deg * arg -> fbData.fb_phaACCWeight - arg -> fbData.fb_phaOffset_deg;
+
+        if(arg -> fbData.fb_refTrackEnabled) {
+            arg -> fbData.fb_pha_deg -= arg -> rfData_ref.avgDataPha_deg;
+        }
+
+        if(arg -> fbData.fb_pha_deg >  180) arg -> fbData.fb_pha_deg -= 360;                        /* normalize to +-180 range */
+        if(arg -> fbData.fb_pha_deg < -180) arg -> fbData.fb_pha_deg += 360;
+
         /* Fast feed forward when the set point changes */
-        if(arg -> fbData.fb_feedForwardEnabled && arg -> fbData.fb_phaSetPoint_deg != phaSetPoint_deg_old && fabs(phaSetPoint_deg_old) <= 180) {
-            arg -> fbData.fb_phaAdj_deg = arg -> fbData.fb_phaSetPoint_deg - phaSetPoint_deg_old;                                   /* Get the adjustement */              
-            if(arg -> fwFunc.FWC_func_setPha_deg) arg -> fwFunc.FWC_func_setPha_deg(arg -> fwModule, arg -> fbData.fb_phaAdj_deg);  /* Apply the adjustement to the firmware */
+        if(arg -> fbData.fb_feedForwardEnabled && 
+           ((arg -> fbData.fb_phaSetPoint_deg != phaSetPoint_deg_old && fabs(phaSetPoint_deg_old) <= 180) || 
+            (arg -> fbData.fb_phaOffset_deg   != phaOffset_deg_old   && fabs(phaOffset_deg_old)   <= 180))) {
+
+            /*arg -> fbData.fb_phaAdj_deg = arg -> fbData.fb_phaSetPoint_deg - phaSetPoint_deg_old;*/                                   /* Get the adjustement, might have problem when the old set point is arbitrary */              
+            arg -> fbData.fb_phaAdj_deg = arg -> fbData.fb_phaSetPoint_deg - arg -> fbData.fb_pha_deg;                                  /* use this solution for fast feedforward */
+            if(arg -> fwFunc.FWC_func_setPha_deg) arg -> fwFunc.FWC_func_setPha_deg(arg -> fwModule, arg -> fbData.fb_phaAdj_deg);      /* Apply the adjustement to the firmware */
 
             phaSetPoint_deg_cal = phaSetPoint_deg_old;
         } else {
@@ -255,15 +271,17 @@ static void RFC_func_mainThread(void *argIn)
 
         /* Measure the phase error, if the set point changed, use the old set point for calculation, see above */
         if(arg -> fbData.fb_phaSLEDWeight != 0 || arg -> fbData.fb_phaACCWeight != 0) {
-            arg -> fbData.fb_phaErr_deg = phaSetPoint_deg_cal - 
-                (arg -> rfData_sledOut.avgDataPha_deg * arg -> fbData.fb_phaSLEDWeight + arg -> rfData_accOut_rf.avgDataPha_deg * arg -> fbData.fb_phaACCWeight);
-        
-            if(arg -> fbData.fb_refTrackEnabled) {                      /* consider the pulse-pulse reference tracking (subtract from the SLED/ACC phase, so add to the error) */
-                arg -> fbData.fb_phaErr_deg += arg -> rfData_ref.avgDataPha_deg;
-            }
+            arg -> fbData.fb_phaErr_deg = phaSetPoint_deg_cal - arg -> fbData.fb_pha_deg;
         } else {
             arg -> fbData.fb_phaErr_deg = 0; 
         }
+
+        if(arg -> fbData.fb_phaErr_deg >  180) arg -> fbData.fb_phaErr_deg -= 360;                  /* normalize to +-180 range */
+        if(arg -> fbData.fb_phaErr_deg < -180) arg -> fbData.fb_phaErr_deg += 360;
+
+        /* Get data for monitoring */
+        arg -> fbData.fb_amp_MV     = arg -> rfData_sledOut.avgDataAmp * arg -> fbData.fb_ampScale_1oMV;                             /* we use the SLED output amplitude for amplitude calculation, so we only scale it to MV */
+        arg -> fbData.fb_ampErr_MV  = arg -> fbData.fb_ampSetPoint_MV - arg -> fbData.fb_amp_MV;
 
         /* Fast feedback, the feedback is independent with the feed forward */
         if((fabs(arg -> fbData.fb_phaErr_deg) < arg -> fbData.fb_phaErrThreshold_deg) &&
@@ -273,10 +291,11 @@ static void RFC_func_mainThread(void *argIn)
             arg -> fbData.fb_phaAdj_deg = arg -> fbData.fb_phaErr_deg * arg -> fbData.fb_phaGain;                                   /* Get the adjustement */
             if(arg -> fwFunc.FWC_func_setPha_deg) arg -> fwFunc.FWC_func_setPha_deg(arg -> fwModule, arg -> fbData.fb_phaAdj_deg);  /* Apply the adjustement to the firmware */
 
-        }        
+        }
 
         /* remember the old set point */
         phaSetPoint_deg_old = arg -> fbData.fb_phaSetPoint_deg;
+        phaOffset_deg_old   = arg -> fbData.fb_phaOffset_deg;
 
         /*----------------------------------------------------
          * HANDLE RF WAVEFORMS FOR BSA
@@ -422,14 +441,21 @@ static void RFC_func_mainThread(void *argIn)
          *      bit 2: 1 for pulse-pulse fb failure
          */
         arg -> statusVector = 0;
-        
+
         if((unsigned int)pulseCnt == 0xFFFFFFFF)                                                        /* when firmware is not available, all reading from register is 0xFFFFFFFF */
             arg -> statusVector += 0x00000001;                                                          
         else
             arg -> statusVector &= 0xFFFFFFFE;
         
-        arg -> statusVector += arg -> fbData.fb_feedbackEnabled << 1;        
+        arg -> statusVector += arg -> fbData.fb_feedbackEnabled     << 1;    
+        arg -> statusVector += arg -> fbData.fb_feedForwardEnabled  << 2;
+        arg -> statusVector += arg -> fbData.fb_refTrackEnabled     << 3;
 
+        if(fabs(arg -> fbData.fb_phaErr_deg) >= arg -> fbData.fb_phaErrThreshold_deg)  arg -> statusVector += 1 << 4;
+        if(arg -> rfData_sledOut.avgDataAmp  >= arg -> fbData.fb_ampLimitHi)           arg -> statusVector += 1 << 5;
+        if(arg -> rfData_sledOut.avgDataAmp  <= arg -> fbData.fb_ampLimitLo)           arg -> statusVector += 1 << 6;
+        if(arg -> fbData.fb_phaSLEDWeight > 0)                                         arg -> statusVector += 1 << 7;
+        if(arg -> fbData.fb_phaACCWeight  > 0)                                         arg -> statusVector += 1 << 8;
 
         /* check the IRQ missing, including enable the IRQ in the firmware */
         if(arg -> fwFunc.FWC_func_meaIntrLatency)
