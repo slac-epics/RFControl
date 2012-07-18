@@ -25,8 +25,6 @@ LLRFLIBS_MODULE_VERSION=MAIN_TRUNK
 INTERNALDATA_MODULE_VERSION=MAIN_TRUNK
 RFCONTROLBOARD_MODULE_VERSION=MAIN_TRUNK
 
-EVENT_MODULE_VERSION=event-R3-2-2-br_generaltime-2-2
-
 #===============================================================================
 # Define the location of modules needed by
 # IOC apps or other Support apps
@@ -36,7 +34,7 @@ LLRFLIBS=$(EPICS_MODULES)/LLRFLibs/$(LLRFLIBS_MODULE_VERSION)
 INTERNALDATA=$(EPICS_MODULES)/InternalData/$(INTERNALDATA_MODULE_VERSION)
 RFCONTROLBOARD=$(EPICS_MODULES)/RFControlBoard/$(RFCONTROLBOARD_MODULE_VERSION)
 
-EVENT=$(EPICS_MODULES)/event/$(EVENT_MODULE_VERSION)
+#EVENT=$(EPICS_MODULES)/event/$(EVENT_MODULE_VERSION)
 #===============================================================================
 
 #=================================================================
