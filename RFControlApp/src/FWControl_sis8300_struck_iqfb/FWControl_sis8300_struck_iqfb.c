@@ -298,6 +298,7 @@ int FWC_sis8300_struck_iqfb_func_setAmp(void *module, double amp)
  */
 int FWC_sis8300_struck_iqfb_func_waitIntr(void *module)
 {
+    int status;
     unsigned int data = 0;
     FWC_sis8300_struck_iqfb_struc_data *arg = (FWC_sis8300_struck_iqfb_struc_data *)module;
 
@@ -306,7 +307,7 @@ int FWC_sis8300_struck_iqfb_func_waitIntr(void *module)
 
     /* wait the interrupt */
     if(arg -> board_handle)
-        FWC_sis8300_struck_iqfb_func_pullInterrupt(arg -> board_handle);
+        status = FWC_sis8300_struck_iqfb_func_pullInterrupt(arg -> board_handle);
 
     /* disable the interrupt */
     data += arg -> board_reset                  << 0;
@@ -321,7 +322,7 @@ int FWC_sis8300_struck_iqfb_func_waitIntr(void *module)
 
     FWC_sis8300_struck_iqfb_func_setBits(arg -> board_handle, data);
 
-    return 0;
+    return status;
 }
 
 /**
