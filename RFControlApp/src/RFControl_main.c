@@ -218,11 +218,13 @@ static void RFC_func_mainThread(void *argIn)
         if(arg -> fwFunc.FWC_func_waitIntr) {
             intId = arg -> fwFunc.FWC_func_waitIntr(arg -> fwModule);
         } else {
+            epicsThreadSleep(epicsThreadSleepQuantum());
             continue;
         }
 
         if(intId == 0) {                                                /* User interrupt occurred */                     
         } else {
+            epicsThreadSleep(epicsThreadSleepQuantum());
             continue;
         }
 
