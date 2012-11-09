@@ -10,6 +10,10 @@
  * Modified by: Zheqiao Geng
  * Modified on: 2011.08.03
  * Description: Add the access for the firmware of LLRF-SIS8300-R-0-0-1
+ * 
+ * Modified by: Zheqiao Geng
+ * Modified on: 11/09/2012
+ * Description: Change the rotation coefficient fraction to 14 bit, this allow (-2, 2) range of the coefficients in firmware
  ****************************************************/
 #ifndef FW_CONTROL_SIS8300_STRUCK_IQFB_BOARD_H
 #define FW_CONTROL_SIS8300_STRUCK_IQFB_BOARD_H
@@ -21,7 +25,7 @@
 /**
  * Constants for board access 
  */
-#define FWC_SIS8300_STRUCK_IQFB_CONST_ROT_COEF_FRACTION 15                                                  /* fraction bits number of the rotation coefficients */
+#define FWC_SIS8300_STRUCK_IQFB_CONST_ROT_COEF_FRACTION 14                                                  /* fraction bits number of the rotation coefficients */
 #define FWC_SIS8300_STRUCK_IQFB_CONST_COR_COEF_FRACTION 14                                                  /* fraction bits number of the coefficients for I/Q modulator imbalance correction */
 #define FWC_SIS8300_STRUCK_IQFB_CONST_GAIN_FRACTION     15                                                  /* fraction bits number of the feedback gain */
 
