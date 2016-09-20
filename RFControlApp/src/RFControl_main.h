@@ -31,11 +31,17 @@
  * Modified by: Zheqiao Geng
  * Modified on: 2011.12.01
  * Description: Add the operator/physics application interfaces
+ *
+ * Modified by: Zheqiao Geng
+ * Modified on: 2/13/2013
+ * Description: Use the RFControlFirmware module APIs for firmware related control. Here directly use the functions of the 
+ *              firmware control module and do not use wrapper function is to reduce a level of function call
  ****************************************************/
 #ifndef RF_CONTROL_MAIN_H
 #define RF_CONTROL_MAIN_H
 
 #define RFC_CONST_RECENT_HISTORY_BUF_DEPTH 2048
+#define RFC_CONST_WF_PNO 1024                               /* point number of the waveforms */
 
 #include "RFLib_signalProcess.h"                            /* use the library data definitions and routines */
 #include "MathLib_dataProcess.h"
@@ -43,8 +49,8 @@
 
 #include "syncDAQ.h"
 
-#include "RFControl_requiredInterface_fwControlVirtual.h"   /* firmware specific codes access */
 #include "RFControl_requiredInterface_fastFeedback.h"       /* interface with the fast feedback */
+#include "RFControlFirmware_availableInterface_api.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -69,7 +75,6 @@ typedef struct {
 
     volatile double fb_ampSetPoint_MV;                      /* amplitude set point (amplitude feedback only works for certain stations) */
     volatile double fb_ampScale_1oMV;                       /* amplitude scale factor, result from the phasing */
-    /*volatile double fb_energyGain_MeV;*/                      /* maximum energy gain of the station, result from the phasing */
 
     volatile double fb_amp_MV;                              /* the final amplitude for feedback (from SLED measurement) */
     volatile double fb_ampErr_MV;                           /* amplitude error */
@@ -98,7 +103,7 @@ typedef struct {
 
     /* --- private data --- */
     char moduleName[EPICSLIB_CONST_NAME_LEN];               /* name of the module instance */
-    char boardModuleName[EPICSLIB_CONST_NAME_LEN];          /* name of the module of the RFControlBoard */
+    char firmwareModuleName[EPICSLIB_CONST_NAME_LEN];             /* name of the module of the RFControlFirmware */
     
     EPICSLIB_type_ioScanPvt ioscanpvt_120Hz;                /* I/O interrupt scanning list for 120Hz upgrade */    
     EPICSLIB_type_threadId  localThread;                    /* thread id */    
@@ -117,9 +122,7 @@ typedef struct {
     volatile unsigned short mtcaOn;                         /* to show if MTCA on (for beam acceleration) or not */
 
     /* --- data and access for firmware --- */
-    void *boardHandle;                                      /* board handle of the RFControlBoard module */
-    void *fwModule;                                         /* data structure of the firmware control */    
-    RFC_struc_fwAccessFunc fwFunc;                          /* virtual functions for firmware access */                    
+    RFCFW_struc_moduleData *firmwareModule;                 /* data structure of the firmware control, here we assume the data structure type is visible */    
 
     /* --- data for phase feedback --- */
     RFC_struc_feedbackData fbData;                          /* phase feedback data */
@@ -167,15 +170,15 @@ typedef struct {
 /**
  * Basic routines for module management
  */
-int  RFC_func_createModule(RFC_struc_moduleData *arg, const char *moduleName);              /* create an instance of this module,INIT ALL PARAMETERS! */      
-int  RFC_func_destroyModule(RFC_struc_moduleData *arg);                                     /* destroy the instance */
+int  RFC_func_createModule(RFC_struc_moduleData *arg, const char *moduleName);                    /* create an instance of this module,INIT ALL PARAMETERS! */      
+int  RFC_func_destroyModule(RFC_struc_moduleData *arg);                                           /* destroy the instance */
 
-int  RFC_func_initModule(RFC_struc_moduleData *arg);                                        /* do some initialization that can not be done during the creation */
+int  RFC_func_initModule(RFC_struc_moduleData *arg);                                              /* do some initialization that can not be done during the creation */
 
-int  RFC_func_associateBoardModule(RFC_struc_moduleData *arg, const char *boardModuleName); /* associate this module with a RFControlBoard module */
+int  RFC_func_associateFirmwareModule(RFC_struc_moduleData *arg, const char *firmwareModuleName); /* associate this module with a RFControlFirmware module */
 
-int  RFC_func_setThreadPriority(RFC_struc_moduleData *arg, unsigned int priority);          /* set the priority of the thread */
-int  RFC_func_createThread(RFC_struc_moduleData *arg);                                      /* create a thread for the board ctrl */
+int  RFC_func_setThreadPriority(RFC_struc_moduleData *arg, unsigned int priority);                /* set the priority of the thread */
+int  RFC_func_createThread(RFC_struc_moduleData *arg);                                            /* create a thread for the board ctrl */
 
 #ifdef __cplusplus
 }

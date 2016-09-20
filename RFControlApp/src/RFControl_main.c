@@ -10,10 +10,17 @@
  * Modified by: Zheqiao Geng
  * Modified on: 2011.07.07
  * Description: Only keep the application layer here (pulse-pulse phase feedback and BSA)
+ *
+ * Modified by: Zheqiao Geng
+ * Modified on: 2/13/2013
+ * Description: Use the RFControlFirmware module APIs for firmware related control. Here directly use the functions of the 
+ *              firmware control module and do not use wrapper function is to reduce a level of function call
  ****************************************************/
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+
+#include "perfMeasure.h"
 
 #include "RFControl_main.h"
 
@@ -42,21 +49,16 @@ __inline__ unsigned long long int rdtsc(void)
  */
 static int RFC_func_getRFData(RFC_struc_moduleData *arg, RFLIB_struc_RFWaveform *data)
 {
-    int status = 0;
-
     /* Check the input */
     if(!arg || !data) return -1;
 
-    /* Get the data */
-    if(arg -> fwFunc.FWC_func_getADCData)    
-        status = arg -> fwFunc.FWC_func_getADCData(arg -> fwModule, data -> chId, 
-                                                                    data -> wfRaw, 
-                                                                   &data -> sampleFreq_MHz,
-                                                                   &data -> sampleDelay_ns,
-                                                                   &data -> pointNum,
-                                                                   &data -> demodCoefIdCur);
-
-    return status;
+    /* Get the data */   
+    return RFCFW_API_getADCData(arg -> firmwareModule, data -> chId, 
+                                                       data -> wfRaw, 
+                                                      &data -> sampleFreq_MHz,
+                                                      &data -> sampleDelay_ns,
+                                                      &data -> pointNum,
+                                                      &data -> demodCoefIdCur);
 }
 
 /**
@@ -121,14 +123,13 @@ static int RFC_func_getAnalogData(RFC_struc_moduleData *arg, RFLIB_struc_analogW
     /* Check the input */
     if(!arg || !data) return -1;
 
-    /* Get the data from the DAQ buffer */    
-    if(arg -> fwFunc.FWC_func_getADCData)    
-        status = arg -> fwFunc.FWC_func_getADCData(arg -> fwModule, data -> chId, 
-                                                                    data -> wfRaw, 
-                                                                   &data -> sampleFreq_MHz,
-                                                                   &data -> sampleDelay_ns,
-                                                                   &data -> pointNum,
-                                                                   &tmpData);                       /* the demodulation coefficient Id is useless here */
+    /* Get the data from the DAQ buffer */       
+    status = RFCFW_API_getADCData(arg -> firmwareModule, data -> chId, 
+                                                         data -> wfRaw, 
+                                                        &data -> sampleFreq_MHz,
+                                                        &data -> sampleDelay_ns,
+                                                        &data -> pointNum,
+                                                        &tmpData);                       /* the demodulation coefficient Id is useless here */
 
     /* Scale the raw data to physical unit and average it */
     status += RFLIB_analogWaveformScale(data);
@@ -179,7 +180,19 @@ static int RFC_func_createBSANode_analogWaveform(RFLIB_struc_analogWaveform *dat
  * Main thread of this module
  */
 static void RFC_func_mainThread(void *argIn) 
-{    
+{
+    perfParm_ts *perf_pMain       = makePerfMeasure("MAINLOOP",   "main thread loop time");
+    perfParm_ts *perf_pDAQ        = makePerfMeasure("DAQ",        "  get all DAQ data in the main thread");
+    perfParm_ts *perf_pPhCtrl     = makePerfMeasure("PHCTRL",     "  phase control block in the main thread");
+    perfParm_ts *perf_pPhCtrlData = makePerfMeasure("PHCTRLDATA", "    data get for phase control block in the main thread");
+    perfParm_ts *perf_pNetDAQ     = makePerfMeasure("NETDAQ",     "      +just net DAQ getting time");
+    perfParm_ts *perf_pRFDemo     = makePerfMeasure("RFDEMO",     "      +RF demodulation calc time");
+    perfParm_ts *perf_pPhCtrlCalc = makePerfMeasure("PHCTRLCALC", "    calculation for the phase control in the main thread");
+    perfParm_ts *perf_pBSA        = makePerfMeasure("BSA",        "  BSA session");
+
+    perfParm_ts *perf_pWFDiag     = makePerfMeasure("WFDIAG",     "  diag. for waveform in the main thread");
+    perfParm_ts *perf_pOthDiag    = makePerfMeasure("OTHDIAG",    "  diag. for others in the main thread");
+
     RFC_struc_moduleData *arg = (RFC_struc_moduleData *)argIn;
 
     int calCnt = 0;                             /* for scheduling the not important calculation */
@@ -215,12 +228,7 @@ static void RFC_func_mainThread(void *argIn)
          * WAIT FOR INTERRUPT
          *----------------------------------------------------*/ 
         /* wait for event, suspend until interrupt comes, including disalbe the IRQ in firmware */
-        if(arg -> fwFunc.FWC_func_waitIntr) {
-            intId = arg -> fwFunc.FWC_func_waitIntr(arg -> fwModule);
-        } else {
-            epicsThreadSleep(epicsThreadSleepQuantum());
-            continue;
-        }
+        intId = RFCFW_API_waitIntr(arg -> firmwareModule);
 
         if(intId == 0) {                                                /* User interrupt occurred */                     
         } else {
@@ -228,24 +236,38 @@ static void RFC_func_mainThread(void *argIn)
             continue;
         }
 
+        startPerfMeasure(perf_pMain);
+        startPerfMeasure(perf_pDAQ);
         /*----------------------------------------------------
          * DATA ACQUISITION BLOCK
          *----------------------------------------------------*/ 
         /* get all DAQ data */
-        if(arg -> fwFunc.FWC_func_getDAQData) arg -> fwFunc.FWC_func_getDAQData(arg -> fwModule);        
+        RFCFW_API_getDAQData(arg -> firmwareModule);        
+        endPerfMeasure(perf_pDAQ);
 
+
+        startPerfMeasure(perf_pPhCtrl);
+        startPerfMeasure(perf_pPhCtrlData);
         /*----------------------------------------------------
          * PHASE CONTROL BLOCK
          *----------------------------------------------------*/ 
         /* Get the RF data */
+        startPerfMeasure(perf_pNetDAQ);
         RFC_func_getRFData(arg, &arg -> rfData_ref);
         RFC_func_getRFData(arg, &arg -> rfData_sledOut);                        /* get the SLED data from the DAQ buffer */
         RFC_func_getRFData(arg, &arg -> rfData_accOut_rf);                      /* get the ACC data from the DAQ buffer */
+        endPerfMeasure(perf_pNetDAQ);
 
         /* Measure the amplitude and phase in the window */
+        startPerfMeasure(perf_pRFDemo);
         RFC_func_demodAvgRFData(&arg -> rfData_ref);
         RFC_func_demodAvgRFData(&arg -> rfData_sledOut);                        
-        RFC_func_demodAvgRFData(&arg -> rfData_accOut_rf); 
+        RFC_func_demodAvgRFData(&arg -> rfData_accOut_rf);
+        endPerfMeasure(perf_pRFDemo);
+
+        endPerfMeasure(perf_pPhCtrlData);
+
+        startPerfMeasure(perf_pPhCtrlCalc);
 
         /* Get the effective phase measurement of last RF pulse (combination of SLED, ACC RF and REF) */
         arg -> fbData.fb_pha_deg = arg -> rfData_sledOut.avgDataPha_deg * arg -> fbData.fb_phaSLEDWeight + arg -> rfData_accOut_rf.avgDataPha_deg * arg -> fbData.fb_phaACCWeight - arg -> fbData.fb_phaOffset_deg;
@@ -264,7 +286,7 @@ static void RFC_func_mainThread(void *argIn)
 
             /*arg -> fbData.fb_phaAdj_deg = arg -> fbData.fb_phaSetPoint_deg - phaSetPoint_deg_old;*/                                   /* Get the adjustement, might have problem when the old set point is arbitrary */              
             arg -> fbData.fb_phaAdj_deg = arg -> fbData.fb_phaSetPoint_deg - arg -> fbData.fb_pha_deg;                                  /* use this solution for fast feedforward */
-            if(arg -> fwFunc.FWC_func_setPha_deg) arg -> fwFunc.FWC_func_setPha_deg(arg -> fwModule, arg -> fbData.fb_phaAdj_deg);      /* Apply the adjustement to the firmware */
+            RFCFW_API_setPha_deg(arg -> firmwareModule, arg -> fbData.fb_phaAdj_deg);                                                   /* Apply the adjustement to the firmware */
 
             phaSetPoint_deg_cal = phaSetPoint_deg_old;
         } else {
@@ -291,13 +313,17 @@ static void RFC_func_mainThread(void *argIn)
             (arg -> rfData_sledOut.avgDataAmp < arg -> fbData.fb_ampLimitHi) && (arg -> fbData.fb_feedbackEnabled)) { 
            
             arg -> fbData.fb_phaAdj_deg = arg -> fbData.fb_phaErr_deg * arg -> fbData.fb_phaGain;                                   /* Get the adjustement */
-            if(arg -> fwFunc.FWC_func_setPha_deg) arg -> fwFunc.FWC_func_setPha_deg(arg -> fwModule, arg -> fbData.fb_phaAdj_deg);  /* Apply the adjustement to the firmware */
+            RFCFW_API_setPha_deg(arg -> firmwareModule, arg -> fbData.fb_phaAdj_deg);                                               /* Apply the adjustement to the firmware */
 
         }
 
         /* remember the old set point */
         phaSetPoint_deg_old = arg -> fbData.fb_phaSetPoint_deg;
         phaOffset_deg_old   = arg -> fbData.fb_phaOffset_deg;
+
+        endPerfMeasure(perf_pPhCtrlCalc);
+
+        endPerfMeasure(perf_pPhCtrl);
 
         /*----------------------------------------------------
          * HANDLE RF WAVEFORMS FOR BSA
@@ -356,7 +382,9 @@ static void RFC_func_mainThread(void *argIn)
                 strcpy(arg -> bsa_sr_statusStr, arg -> bsa_wfFileName_full);
                 strcat(arg -> bsa_sr_statusStr, " saved!");
             }
-        }  
+        } 
+
+        startPerfMeasure(perf_pWFDiag);
                      
         /*----------------------------------------------------
          * WAVEFORMS DIAGNOSTICS
@@ -365,7 +393,7 @@ static void RFC_func_mainThread(void *argIn)
         switch(calCnt) {
             case 0:                    
                 /* firmware intermediate waveforms */
-                if(arg -> fwFunc.FWC_func_getIntData) arg -> fwFunc.FWC_func_getIntData(arg -> fwModule);                
+                RFCFW_API_getIntData(arg -> firmwareModule);                
                 break;
 
             case 1:  RFC_func_IQ2AP(&arg -> rfData_ref);            break;
@@ -378,8 +406,12 @@ static void RFC_func_mainThread(void *argIn)
             default: break;
         };
 
+        endPerfMeasure(perf_pWFDiag);
+
         calCnt ++;
         if(calCnt > 7) calCnt = 0;
+
+        startPerfMeasure(perf_pOthDiag);
 
         /*----------------------------------------------------
          * OTHER DIAGNOSTICS
@@ -437,6 +469,8 @@ static void RFC_func_mainThread(void *argIn)
         memcpy((void*)arg -> diag_probeData2, (void *)(arg -> diag_probeData2 + 1), sizeof(double) * (RFC_CONST_RECENT_HISTORY_BUF_DEPTH - 1));
         arg -> diag_probeData2[RFC_CONST_RECENT_HISTORY_BUF_DEPTH - 1] = probeData2;
 
+        endPerfMeasure(perf_pOthDiag);
+
         /* compile the status vector (continuing)
          *      bit 0: 1 for firmware/communication failure
          *      bit 1: 1 for pulse-pulse fb enabled
@@ -460,8 +494,7 @@ static void RFC_func_mainThread(void *argIn)
         if(arg -> fbData.fb_phaACCWeight  > 0)                                         arg -> statusVector += 1 << 8;
 
         /* check the IRQ missing, including enable the IRQ in the firmware */
-        if(arg -> fwFunc.FWC_func_meaIntrLatency)
-            arg -> fwFunc.FWC_func_meaIntrLatency(arg -> fwModule, &irqDelayCnt, &pulseCnt);            /* get the IRQ delay and trigger counter from firmware */
+        RFCFW_API_meaIntrLatency(arg -> firmwareModule, &irqDelayCnt, &pulseCnt);                       /* get the IRQ delay and trigger counter from firmware */
 
         arg -> IRQDelayCnt = irqDelayCnt;
 
@@ -474,6 +507,8 @@ static void RFC_func_mainThread(void *argIn)
          *----------------------------------------------------*/
         /* stop the thread on request */
         if(arg -> stopThread) break;
+
+        endPerfMeasure(perf_pMain);
     }
 }
 
@@ -526,7 +561,7 @@ int RFC_func_destroyModule(RFC_struc_moduleData *arg)
     arg -> threadCreated = 0;    
 
     /* delete the dynamicly created things (note: the board module is created in other place, so not free here) */
-    if(arg -> fwModule) free(arg -> fwModule);                          
+    if(arg -> firmwareModule) free(arg -> firmwareModule);                          
 
     return 0;
 }
@@ -542,33 +577,18 @@ int RFC_func_destroyModule(RFC_struc_moduleData *arg)
  */ 
 int RFC_func_initModule(RFC_struc_moduleData *arg)
 {
-    long sampleNum_max = 0;
-
     /* check the input */
     if(!arg) return -1;
 
-    /* init the firmware specific data */
-    if(arg -> fwFunc.FWC_func_init)
-        arg -> fwFunc.FWC_func_init(arg -> fwModule);
-
-    /* associate the board handle with the firmware (make sure they are associated regardless of the 
-     * sequence to set the firmware module and board module
-     */
-    RFC_func_associateBoardModule(arg, arg -> boardModuleName);
-
-    /* get the firmware supported max waveform sample number (which will decide the EPICS waveform record NELM) */
-    if(arg -> fwFunc.FWC_func_getMaxSampleNum)
-        arg -> fwFunc.FWC_func_getMaxSampleNum(&sampleNum_max);
-
     /* init the waveforms */              
-    RFLIB_initRFWaveform(&arg -> rfData_ref,                 sampleNum_max);
-    RFLIB_initRFWaveform(&arg -> rfData_vmOut,               sampleNum_max);
-    RFLIB_initRFWaveform(&arg -> rfData_klyDrive,            sampleNum_max);
-    RFLIB_initRFWaveform(&arg -> rfData_klyOut,              sampleNum_max);
-    RFLIB_initRFWaveform(&arg -> rfData_sledOut,             sampleNum_max);
-    RFLIB_initRFWaveform(&arg -> rfData_accOut_rf,           sampleNum_max);
-    RFLIB_initRFWaveform(&arg -> rfData_accOut_beam,         sampleNum_max);    
-    RFLIB_initAnalogWaveform(&arg -> analogData_klyBeamV,    sampleNum_max);
+    RFLIB_initRFWaveform(&arg -> rfData_ref,                 RFC_CONST_WF_PNO);
+    RFLIB_initRFWaveform(&arg -> rfData_vmOut,               RFC_CONST_WF_PNO);
+    RFLIB_initRFWaveform(&arg -> rfData_klyDrive,            RFC_CONST_WF_PNO);
+    RFLIB_initRFWaveform(&arg -> rfData_klyOut,              RFC_CONST_WF_PNO);
+    RFLIB_initRFWaveform(&arg -> rfData_sledOut,             RFC_CONST_WF_PNO);
+    RFLIB_initRFWaveform(&arg -> rfData_accOut_rf,           RFC_CONST_WF_PNO);
+    RFLIB_initRFWaveform(&arg -> rfData_accOut_beam,         RFC_CONST_WF_PNO);    
+    RFLIB_initAnalogWaveform(&arg -> analogData_klyBeamV,    RFC_CONST_WF_PNO);
 
     /* init the sync DAQ list */
     SDAQ_func_createDataNode(&arg -> fbData.fb_phaErr_deg);
@@ -588,37 +608,26 @@ int RFC_func_initModule(RFC_struc_moduleData *arg)
 }
 
 /**
- * Associate the module with a RFControlBoard module and the firmware specific control module
+ * Associate the module with a RFControlFirmware module and the firmware specific control module
  * Input:
- *     arg              : Data structure of the module instance
- *     boardModuleName  : Name of the RFControlBoard module
+ *     arg                 : Data structure of the module instance
+ *     firmwareModuleName  : Name of the RFControlBoard module
  * Return:
  *     0                : Successful
  *    -1                : Failed 
  */
-int RFC_func_associateBoardModule(RFC_struc_moduleData *arg, const char *boardModuleName)
+int RFC_func_associateFirmwareModule(RFC_struc_moduleData *arg, const char *firmwareModuleName)
 {
     /* Check the input */
-    if(!arg || !boardModuleName ||!boardModuleName[0]) return -1;
+    if(!arg || !firmwareModuleName ||!firmwareModuleName[0]) return -1;
     
     /* Save the module name and get its address */
-    strcpy(arg -> boardModuleName, boardModuleName);   
+    strcpy(arg -> firmwareModuleName, firmwareModuleName);   
     
-    if(arg -> fwFunc.FWC_func_getBoardHandle) {
-        arg -> boardHandle = arg -> fwFunc.FWC_func_getBoardHandle(boardModuleName);
-    
-        if(arg -> boardHandle != NULL) {        
-            /* associate the board handle with the firmware module */
-            if(arg -> fwFunc.FWC_func_assBoardHandle)
-                arg -> fwFunc.FWC_func_assBoardHandle(arg -> fwModule, arg -> boardHandle);
+    arg -> firmwareModule = RFCFW_API_getModule(firmwareModuleName);
 
-            return 0;
-        } else {
-            return -1;
-        }
-    }
-
-    return 0;
+    if(arg -> firmwareModule) return 0;
+    else return -1;
 }
 
 /**

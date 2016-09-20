@@ -10,6 +10,14 @@
  * Modified by: Zheqiao Geng
  * Modified on: 2011.07.07
  * Description: Use virtual functions for the firmware access
+ *
+ * Modified by: Zheqiao Geng
+ * Modified on: 2/7/2013
+ * Description: redesign the RFC_API_createModule function to pass the firmwareType to simplify the implementation
+ *
+ * Modified by: Zheqiao Geng
+ * Modified on: 2/13/2013
+ * Description: Move the firmware specific code to the RFControlFirmware module
  ****************************************************/
 #include <stdlib.h>             
 #include <string.h>
@@ -39,7 +47,7 @@ static int RFC_gvar_moduleInstanceListInitalized = 0;
  */
 int RFC_API_createModule(const char *moduleName)
 {
-    RFC_struc_moduleData *ptr_dataInstance = NULL;
+    RFC_struc_moduleData                *ptr_dataInstance = NULL;
 
     /* Check the input parameters */
     if(!moduleName || !moduleName[0]) {
@@ -67,7 +75,19 @@ int RFC_API_createModule(const char *moduleName)
         free(ptr_dataInstance);                            /* clean the garbage */
         return -1;
     }
-   
+
+    /* init the system */
+    if(RFC_func_initModule(ptr_dataInstance) != 0) {
+        EPICSLIB_func_errlogPrintf("RFC_API_createModule: Failed to init the module of %s\n", moduleName);
+        return -1;
+    }
+
+    /* create EPICS records */
+    if(RFC_func_createEpicsData(ptr_dataInstance) != 0) {                                                                          
+        EPICSLIB_func_errlogPrintf("RFC_API_createModule: There are errors to create records for the module of %s\n", moduleName);
+        return -1;
+    }
+
     /* Add the successful module instance into the list */
     EPICSLIB_func_LinkedListInsert(RFC_gvar_moduleInstanceList, ptr_dataInstance -> node);
 
@@ -124,10 +144,9 @@ int RFC_API_deleteModule(const char *moduleName)
 
 /**
  * Set up the parameters of the module instance, the command will include:
- *   - RFCB_NAME  : Set the RFControlBoard module name that this module instance will be connected to
- *   - THRD_PRIO  : Set the thread priority
- *   - THRD_CRAT  : Create and start the thread
- *   - FMWR_NAME  : Set the firmware name
+ *   - RFCFW_NAME  : Set the RFControlFirmware module name that this module instance will be connected to
+ *   - THRD_PRIO   : Set the thread priority
+ *   - THRD_CRAT   : Create and start the thread
  * Input: 
  *     moduleName : Name of the module instance
  *     cmd        : Command listed above
@@ -140,8 +159,6 @@ int RFC_API_setupModule(const char *moduleName, const char *cmd, const char *dat
 {
     int var_priority = 0;
     RFC_struc_moduleData                *ptr_dataInstance    = NULL;
-    FWC_sis8300_desy_iqfb_struc_data    *ptr_fwDataInstance  = NULL;                         /* firmware specific data: sis8300 board, desy platform fw,   i/q feedback app fw */
-    FWC_sis8300_struck_iqfb_struc_data  *ptr_fwDataInstance2 = NULL;                         /* firmware specific data: sis8300 board, struck platform fw, i/q feedback app fw */
 
     /* Check the input parameters */
     if(!moduleName || !moduleName[0]) {
@@ -158,11 +175,11 @@ int RFC_API_setupModule(const char *moduleName, const char *cmd, const char *dat
     }
 
     /* Response to each command */
-    if(strcmp("RFCB_NAME", cmd) == 0) {
+    if(strcmp("RFCFW_NAME", cmd) == 0) {
 
         /* --- set RFControlBoardName --- */
-        if(RFC_func_associateBoardModule(ptr_dataInstance, dataStr) != 0) {
-            EPICSLIB_func_errlogPrintf("RFC_API_setupModule: Failed to set board name\n");
+        if(RFC_func_associateFirmwareModule(ptr_dataInstance, dataStr) != 0) {
+            EPICSLIB_func_errlogPrintf("RFC_API_setupModule: Failed to set firmware module name\n");
             return -1;
         }
 
@@ -187,103 +204,6 @@ int RFC_API_setupModule(const char *moduleName, const char *cmd, const char *dat
         if(RFC_func_createThread(ptr_dataInstance) != 0) {
             EPICSLIB_func_errlogPrintf("RFC_API_setupModule: Failed to create the thread\n");
             return -1;
-        }
-
-    } else if(strcmp("FMWR_NAME", cmd) == 0) {
-
-        /* --- initalize the firmware specific things --- */
-        if(strcmp("SIS8300:DESY:IQFB", dataStr) == 0) {
-            
-            /* 1. connect the virtual functions */
-            ptr_dataInstance -> fwFunc.FWC_func_init            = FWC_sis8300_desy_iqfb_func_init;
-
-            ptr_dataInstance -> fwFunc.FWC_func_createEpicsData = FWC_sis8300_desy_iqfb_func_createEpicsData;
-            ptr_dataInstance -> fwFunc.FWC_func_deleteEpicsData = FWC_sis8300_desy_iqfb_func_deleteEpicsData;
-
-            ptr_dataInstance -> fwFunc.FWC_func_getBoardHandle  = FWC_sis8300_desy_iqfb_func_getBoard;
-            ptr_dataInstance -> fwFunc.FWC_func_assBoardHandle  = FWC_sis8300_desy_iqfb_func_assBoard;
-
-            ptr_dataInstance -> fwFunc.FWC_func_getMaxSampleNum = FWC_sis8300_desy_iqfb_func_getMaxSampleNum;
-
-            ptr_dataInstance -> fwFunc.FWC_func_getDAQData      = FWC_sis8300_desy_iqfb_func_getDAQData;
-            ptr_dataInstance -> fwFunc.FWC_func_getADCData      = FWC_sis8300_desy_iqfb_func_getADCData;
-            ptr_dataInstance -> fwFunc.FWC_func_getIntData      = FWC_sis8300_desy_iqfb_func_getIntData;
-
-            ptr_dataInstance -> fwFunc.FWC_func_setPha_deg      = FWC_sis8300_desy_iqfb_func_setPha_deg;
-            ptr_dataInstance -> fwFunc.FWC_func_setAmp          = FWC_sis8300_desy_iqfb_func_setAmp;
-            
-            ptr_dataInstance -> fwFunc.FWC_func_waitIntr        = FWC_sis8300_desy_iqfb_func_waitIntr;
-
-            ptr_dataInstance -> fwFunc.FWC_func_meaIntrLatency  = FWC_sis8300_desy_iqfb_func_meaIntrLatency;
-
-            /* 2. create data instance for the firmware */
-            ptr_fwDataInstance = (FWC_sis8300_desy_iqfb_struc_data *)calloc(1, sizeof(FWC_sis8300_desy_iqfb_struc_data));
-
-            if(ptr_fwDataInstance == NULL) {
-                EPICSLIB_func_errlogPrintf("RFC_API_setupModule: Failed to create the data structure for the firmware SIS8300:DESY:IQFB for %s\n", moduleName);
-                return -1;
-            } else {
-                ptr_dataInstance -> fwModule = (void *)ptr_fwDataInstance;
-            }
-
-            /* 3. init the system */
-            if(RFC_func_initModule(ptr_dataInstance) != 0) {
-                EPICSLIB_func_errlogPrintf("RFC_API_setupModule: Failed to init the module of %s\n", moduleName);
-                return -1;
-            }
-
-            /* 4. create EPICS records */
-            if(RFC_func_createEpicsData(ptr_dataInstance) != 0) {                                                                          
-                EPICSLIB_func_errlogPrintf("RFC_API_setupModule: There are errors to create records for the module of %s\n", moduleName);
-                return -1;
-            }
-   
-        } else if(strcmp("SIS8300:STRUCK:IQFB", dataStr) == 0) {
-            
-            /* 1. connect the virtual functions */
-            ptr_dataInstance -> fwFunc.FWC_func_init            = FWC_sis8300_struck_iqfb_func_init;
-
-            ptr_dataInstance -> fwFunc.FWC_func_createEpicsData = FWC_sis8300_struck_iqfb_func_createEpicsData;
-            ptr_dataInstance -> fwFunc.FWC_func_deleteEpicsData = FWC_sis8300_struck_iqfb_func_deleteEpicsData;
-
-            ptr_dataInstance -> fwFunc.FWC_func_getBoardHandle  = FWC_sis8300_struck_iqfb_func_getBoard;
-            ptr_dataInstance -> fwFunc.FWC_func_assBoardHandle  = FWC_sis8300_struck_iqfb_func_assBoard;
-
-            ptr_dataInstance -> fwFunc.FWC_func_getMaxSampleNum = FWC_sis8300_struck_iqfb_func_getMaxSampleNum;
-
-            ptr_dataInstance -> fwFunc.FWC_func_getDAQData      = FWC_sis8300_struck_iqfb_func_getDAQData;
-            ptr_dataInstance -> fwFunc.FWC_func_getADCData      = FWC_sis8300_struck_iqfb_func_getADCData;
-            ptr_dataInstance -> fwFunc.FWC_func_getIntData      = FWC_sis8300_struck_iqfb_func_getIntData;
-
-            ptr_dataInstance -> fwFunc.FWC_func_setPha_deg      = FWC_sis8300_struck_iqfb_func_setPha_deg;
-            ptr_dataInstance -> fwFunc.FWC_func_setAmp          = FWC_sis8300_struck_iqfb_func_setAmp;
-            
-            ptr_dataInstance -> fwFunc.FWC_func_waitIntr        = FWC_sis8300_struck_iqfb_func_waitIntr;
-
-            ptr_dataInstance -> fwFunc.FWC_func_meaIntrLatency  = FWC_sis8300_struck_iqfb_func_meaIntrLatency;
-
-            /* 2. create data instance for the firmware */
-            ptr_fwDataInstance2 = (FWC_sis8300_struck_iqfb_struc_data *)calloc(1, sizeof(FWC_sis8300_struck_iqfb_struc_data));
-
-            if(ptr_fwDataInstance2 == NULL) {
-                EPICSLIB_func_errlogPrintf("RFC_API_setupModule: Failed to create the data structure for the firmware SIS8300:STRUCK:IQFB for %s\n", moduleName);
-                return -1;
-            } else {
-                ptr_dataInstance -> fwModule = (void *)ptr_fwDataInstance2;
-            }
-
-            /* 3. init the system */
-            if(RFC_func_initModule(ptr_dataInstance) != 0) {
-                EPICSLIB_func_errlogPrintf("RFC_API_setupModule: Failed to init the module of %s\n", moduleName);
-                return -1;
-            }
-
-            /* 4. create EPICS records */
-            if(RFC_func_createEpicsData(ptr_dataInstance) != 0) {                                                                          
-                EPICSLIB_func_errlogPrintf("RFC_API_setupModule: There are errors to create records for the module of %s\n", moduleName);
-                return -1;
-            }
-   
         }
 
     } else {

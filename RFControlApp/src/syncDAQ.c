@@ -139,6 +139,8 @@ int SDAQ_func_saveData(int dataId, char *nameStr)
 
         }
     }
+
+    return 0;
 }
 
 /**
@@ -175,6 +177,8 @@ int SDAQ_func_saveWf(int wfId, char *nameStr)
             fclose(outFile);
         }
     }
+
+    return 0;
 }
 
 

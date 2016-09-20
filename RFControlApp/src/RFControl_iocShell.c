@@ -21,7 +21,7 @@ extern "C" {
  * IOC shell Routines
  *======================================*/
 /* RFC_API_createModule(const char *moduleName) */
-static const iocshArg        RFC_createModule_Arg0    = {"moduleName", iocshArgString};
+static const iocshArg        RFC_createModule_Arg0    = {"moduleName",   iocshArgString};
 static const iocshArg *const RFC_createModule_Args[1] = {&RFC_createModule_Arg0};
 static const iocshFuncDef    RFC_createModule_FuncDef = {"RFC_createModule", 1, RFC_createModule_Args};
 static void  RFC_createModule_CallFunc(const iocshArgBuf *args) {RFC_API_createModule(args[0].sval);}

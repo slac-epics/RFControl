@@ -10,6 +10,10 @@
  * Modified by: Zheqiao Geng
  * Modified on: 2011.07.07
  * Description: Use virtual functions for the firmware access
+ *
+ * Modified by: Zheqiao Geng
+ * Modified on: 2/7/2013
+ * Description: redesign the RFC_API_createModule function to pass the firmwareType to simplify the implementation
  ****************************************************/
 #ifndef RF_CONTROL_AVAILABLE_INTERFACE_API_H
 #define RF_CONTROL_AVAILABLE_INTERFACE_API_H

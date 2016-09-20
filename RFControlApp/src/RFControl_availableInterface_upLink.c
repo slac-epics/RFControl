@@ -7,6 +7,10 @@
  * Created by: Zheqiao Geng, gengzq@slac.stanford.edu
  * Created on: 2011.05.16
  * Description: Initial creation
+ *
+ * Modified by: Zheqiao Geng
+ * Modified on: 2/13/2013
+ * Description: Remove the part for firmware data creation
  ****************************************************/
 #include <stdlib.h>             
 #include <string.h>
@@ -174,9 +178,6 @@ int RFC_func_createEpicsData(RFC_struc_moduleData *arg)
     /*-----------------------------------
      * Data of the firmware module
      *-----------------------------------*/
-    if(arg -> fwFunc.FWC_func_createEpicsData)    
-        status += arg -> fwFunc.FWC_func_createEpicsData(arg -> fwModule, arg -> moduleName);
-
     status += INTD_API_createDataNode(arg->moduleName, "MTCAON",            (void *)(&arg->mtcaOn),                         (void *)arg, 1, NULL, INTD_USHORT, NULL, NULL, NULL, NULL, INTD_BO, INTD_PASSIVE);      
 
     /*-----------------------------------
